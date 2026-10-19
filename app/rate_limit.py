@@ -43,6 +43,7 @@ limiter = Limiter(
     strategy="fixed-window",
     in_memory_fallback_enabled=True,
     key_prefix="studyhub",
+    enabled=get_settings().rate_limit_enabled,
 )
 
 GLOBAL_LIMIT = parse_many("100/15minutes")[0]

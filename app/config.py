@@ -27,6 +27,7 @@ class Settings(BaseSettings):
 
     # Rate limiting (Upstash: rediss://default:<token>@<host>:6379)
     redis_url: str = "memory://"
+    rate_limit_enabled: bool = True  # set false only for local load/UI testing
     trusted_proxy_hops: int = 1  # Render adds one X-Forwarded-For hop; 0 = ignore the header
 
     # AI

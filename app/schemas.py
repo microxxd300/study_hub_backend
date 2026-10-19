@@ -61,6 +61,7 @@ class ProfileOut(Out):
     reminders_enabled: bool
     onboarded: bool
     buddy_mode: BuddyMode = "on"
+    daily_goal_minutes: int = 60
     is_demo: bool = False
 
 
@@ -70,6 +71,7 @@ class ProfileUpdate(In):
     reminders_enabled: bool | None = None
     onboarded: bool | None = None
     buddy_mode: BuddyMode | None = None
+    daily_goal_minutes: int | None = Field(default=None, ge=5, le=720)
 
 
 # ---------------------------------------------------------------- topics
@@ -346,3 +348,23 @@ class AiCommandResult(AiModel):
     minutes: int | None = Field(default=None, ge=1, le=720)
     topic: Annotated[str, _clip(40)] | None = None
     label: Annotated[str, _clip(80)] | None = None
+
+
+# ---------------------------------------------------------------- weekly stats
+
+
+class WeekStat(BaseModel):
+    week_start: date  # Monday, user's timezone
+    total_minutes: int
+    present_days: int
+    by_topic: dict[str, int]  # topic id (or "none") -> minutes
+
+
+class TopicTotal(BaseModel):
+    topic_id: str  # topic id, or "none"
+    minutes: int
+
+
+class WeeklyStatsOut(BaseModel):
+    weeks: list[WeekStat]  # oldest first, every week present (zeros filled)
+    topics: list[TopicTotal]  # whole period, most minutes first

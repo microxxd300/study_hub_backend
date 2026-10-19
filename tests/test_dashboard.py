@@ -84,3 +84,27 @@ async def test_sessions_cursor_pagination(user: User):
 
     assert (await user.get("/api/sessions?limit=51")).status_code == 422
     assert (await user.get("/api/sessions?cursor=garbage")).json()["error"]["code"] == "bad_cursor"
+
+
+async def test_weekly_stats(user: User):
+    a = await user.topic("Alpha")
+    b = await user.topic("Beta")
+    await _seed_days(user, a["id"], [0, 1], minutes=30)
+    await _seed_days(user, b["id"], [8], minutes=20)  # previous week or earlier
+
+    r = await user.get("/api/stats/weekly?weeks=4")
+    assert r.status_code == 200, r.text
+    assert queries(r) <= 3, f"weekly stats ran {queries(r)} queries"
+    data = r.json()
+    weeks = data["weeks"]
+    assert len(weeks) == 4
+    starts = [w["week_start"] for w in weeks]
+    assert starts == sorted(starts)  # oldest first, Mondays
+    from datetime import date as _d
+
+    assert all(_d.fromisoformat(s).weekday() == 0 for s in starts)
+    assert sum(w["total_minutes"] for w in weeks) == 80
+    assert {t["topic_id"]: t["minutes"] for t in data["topics"]} == {a["id"]: 60, b["id"]: 20}
+    assert data["topics"][0]["topic_id"] == a["id"]  # most minutes first
+
+    assert (await user.get("/api/stats/weekly?weeks=27")).status_code == 422

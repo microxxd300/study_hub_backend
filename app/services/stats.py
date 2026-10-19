@@ -113,3 +113,67 @@ async def heatmap_days(
     sql = sql.bindparams(bindparam("uid", type_=PG_UUID(as_uuid=True)))
     rows = await db.execute(sql, _params(user_id, topic_id, start=start, today=today))
     return [dict(r) for r in rows.mappings()]
+
+
+# ---------------------------------------------------------------- weekly stats
+
+_WEEKS_SQL = text(
+    """
+    WITH days AS (
+      SELECT date, total_minutes, minutes_by_topic,
+             (date - (EXTRACT(ISODOW FROM date)::int - 1))::date AS week_start
+      FROM daily_summary
+      WHERE user_id = :uid AND date >= :start AND date <= :today
+    ),
+    topic_week AS (
+      SELECT d.week_start, kv.key AS topic, SUM(kv.value::int) AS minutes
+      FROM days d, jsonb_each_text(d.minutes_by_topic) AS kv
+      GROUP BY d.week_start, kv.key
+    )
+    SELECT w.week_start,
+           SUM(w.total_minutes)::int AS total_minutes,
+           COUNT(*) FILTER (WHERE w.total_minutes >= :present)::int AS present_days,
+           COALESCE((SELECT jsonb_object_agg(t.topic, t.minutes) FROM topic_week t
+                     WHERE t.week_start = w.week_start), '{}'::jsonb) AS by_topic
+    FROM days w
+    GROUP BY w.week_start
+    ORDER BY w.week_start
+    """
+).bindparams(bindparam("uid", type_=PG_UUID(as_uuid=True)))
+
+_TOPIC_TOTALS_SQL = text(
+    """
+    SELECT kv.key AS topic_id, SUM(kv.value::int)::int AS minutes
+    FROM daily_summary d, jsonb_each_text(d.minutes_by_topic) AS kv
+    WHERE d.user_id = :uid AND d.date >= :start AND d.date <= :today
+    GROUP BY kv.key
+    ORDER BY minutes DESC, kv.key
+    """
+).bindparams(bindparam("uid", type_=PG_UUID(as_uuid=True)))
+
+
+async def weekly_stats(db: AsyncSession, user_id: uuid.UUID, today: date, weeks: int) -> dict:
+    """Last `weeks` Monday-start weeks (including the current one), aggregated in SQL.
+
+    Two round trips. Missing weeks are filled with zeros so the client always
+    gets exactly `weeks` rows.
+    """
+    this_week = today - timedelta(days=today.weekday())
+    start = this_week - timedelta(weeks=weeks - 1)
+    params = {"uid": user_id, "start": start, "today": today, "present": PRESENT_MINUTES}
+    rows = {r.week_start: r for r in (await db.execute(_WEEKS_SQL, params)).all()}
+    topics = (await db.execute(_TOPIC_TOTALS_SQL, params)).mappings().all()
+
+    out = []
+    for i in range(weeks):
+        ws = start + timedelta(weeks=i)
+        r = rows.get(ws)
+        out.append(
+            {
+                "week_start": ws,
+                "total_minutes": r.total_minutes if r else 0,
+                "present_days": r.present_days if r else 0,
+                "by_topic": dict(r.by_topic) if r else {},
+            }
+        )
+    return {"weeks": out, "topics": [dict(t) for t in topics]}

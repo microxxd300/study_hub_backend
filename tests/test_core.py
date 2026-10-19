@@ -69,6 +69,14 @@ async def test_buddy_mode(user: User):
     assert (await user.patch("/api/me", json={"buddy_mode": "loud"})).status_code == 422
 
 
+async def test_daily_goal(user: User):
+    assert (await user.get("/api/me")).json()["daily_goal_minutes"] == 60
+    r = await user.patch("/api/me", json={"daily_goal_minutes": 90})
+    assert r.status_code == 200 and r.json()["daily_goal_minutes"] == 90
+    assert (await user.patch("/api/me", json={"daily_goal_minutes": 2})).status_code == 422
+    assert (await user.patch("/api/me", json={"daily_goal_minutes": 1000})).status_code == 422
+
+
 async def test_topics_crud_and_validation(user: User, other_user: User):
     t = await user.topic("Calculus", "iris")
     assert t["name"] == "Calculus" and t["archived"] is False

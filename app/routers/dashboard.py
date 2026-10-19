@@ -9,10 +9,10 @@ from app.deps import DB
 from app.errors import not_found
 from app.models import CoachReport, Topic
 from app.routers.me import profile_out
-from app.schemas import CoachReportOut, CoachState, DashboardOut, HeatmapOut
+from app.schemas import CoachReportOut, CoachState, DashboardOut, HeatmapOut, WeeklyStatsOut
 from app.services.coach import week_bounds
 from app.services.profiles import get_or_create_profile, local_today
-from app.services.stats import heatmap_days, streak_stats
+from app.services.stats import heatmap_days, streak_stats, weekly_stats
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
 
@@ -85,3 +85,11 @@ async def heatmap(user: AuthUser, db: DB, topic_id: Annotated[uuid.UUID | None, 
     days = await heatmap_days(db, user.id, today, topic_id)
     stats = await streak_stats(db, user.id, today, topic_id)
     return {**stats, "days": days, "today": today, "topic_id": topic_id}
+
+
+@router.get("/stats/weekly", response_model=WeeklyStatsOut)
+async def stats_weekly(user: AuthUser, db: DB, weeks: Annotated[int, Query(ge=1, le=26)] = 8) -> dict:
+    """Minutes per Monday-start week (user's timezone) with a per-topic breakdown.
+    3 queries: profile, weeks, topic totals."""
+    profile = await get_or_create_profile(db, user)
+    return await weekly_stats(db, user.id, local_today(profile.timezone), weeks)

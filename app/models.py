@@ -54,7 +54,10 @@ def _created_at() -> Mapped[datetime]:
 
 class Profile(Base):
     __tablename__ = "profiles"
-    __table_args__ = (CheckConstraint("buddy_mode IN ('on', 'quiet', 'off')", name="ck_profiles_buddy_mode"),)
+    __table_args__ = (
+        CheckConstraint("buddy_mode IN ('on', 'quiet', 'off')", name="ck_profiles_buddy_mode"),
+        CheckConstraint("daily_goal_minutes BETWEEN 5 AND 720", name="ck_profiles_daily_goal"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)  # = Supabase auth user id
     email: Mapped[str | None] = mapped_column(String(320))
@@ -64,6 +67,7 @@ class Profile(Base):
     onboarded: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     # Mascot "Dot": on | quiet (no speech bubbles) | off
     buddy_mode: Mapped[str] = mapped_column(String(8), nullable=False, server_default="on")
+    daily_goal_minutes: Mapped[int] = mapped_column(Integer, nullable=False, server_default="60")
     last_reminder_on: Mapped[date | None] = mapped_column(Date)
     created_at: Mapped[datetime] = _created_at()
 
